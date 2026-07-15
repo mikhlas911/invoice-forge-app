@@ -1,4 +1,5 @@
 import { createFileRoute, Link, notFound } from "@tanstack/react-router";
+import type { LineItem } from "@/lib/demo-data";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/status-badge";
 import { INVOICES, BUSINESS_PROFILE, formatMoney, computeTotals } from "@/lib/demo-data";
@@ -87,7 +88,7 @@ function InvoiceView() {
             </tr>
           </thead>
           <tbody>
-            {inv.items.map((it) => {
+            {inv.items.map((it: LineItem) => {
               const line = it.quantity * it.price;
               const disc = line * (it.discount / 100);
               const amt = (line - disc) * (1 + it.tax / 100);
