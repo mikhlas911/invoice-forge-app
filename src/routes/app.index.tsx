@@ -2,7 +2,9 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { StatusBadge } from "@/components/status-badge";
-import { INVOICES, formatMoney, computeTotals } from "@/lib/demo-data";
+import { formatMoney, computeTotals } from "@/lib/utils/money";
+import { useAppStore } from "@/lib/store/app-store";
+import type { Invoice } from "@/lib/data/types";
 import { ArrowUpRight, TrendingUp, AlertTriangle, FileText, Wallet, Plus } from "lucide-react";
 
 export const Route = createFileRoute("/app/")({
@@ -10,7 +12,7 @@ export const Route = createFileRoute("/app/")({
   component: Dashboard,
 });
 
-function invTotal(inv: (typeof INVOICES)[number]) {
+function invTotal(inv: Invoice) {
   return computeTotals(inv.items).total;
 }
 
@@ -31,14 +33,16 @@ function Kpi({ label, value, hint, tone = "default", icon: Icon }: { label: stri
 }
 
 function Dashboard() {
-  const totalInvoiced = INVOICES.reduce((s, i) => s + invTotal(i), 0);
-  const totalPaid = INVOICES.filter((i) => i.status === "paid").reduce((s, i) => s + invTotal(i), 0) + INVOICES.filter((i) => i.status === "partial").reduce((s, i) => s + i.amountPaid, 0);
+  const { invoices } = useAppStore();
+  const totalInvoiced = invoices.reduce((s, i) => s + invTotal(i), 0);
+  const totalPaid = invoices.filter((i) => i.status === "paid").reduce((s, i) => s + invTotal(i), 0) + invoices.filter((i) => i.status === "partial").reduce((s, i) => s + i.amountPaid, 0);
   const outstanding = totalInvoiced - totalPaid;
-  const overdue = INVOICES.filter((i) => i.status === "overdue").reduce((s, i) => s + invTotal(i), 0);
-  const drafts = INVOICES.filter((i) => i.status === "draft").length;
-  const paidThisMonth = INVOICES.filter((i) => i.status === "paid" && i.issueDate.startsWith("2026-07")).reduce((s, i) => s + invTotal(i), 0);
+  const overdue = invoices.filter((i) => i.status === "overdue").reduce((s, i) => s + invTotal(i), 0);
+  const drafts = invoices.filter((i) => i.status === "draft").length;
+  const thisMonth = new Date().toISOString().slice(0, 7);
+  const paidThisMonth = invoices.filter((i) => i.status === "paid" && i.issueDate.startsWith(thisMonth)).reduce((s, i) => s + invTotal(i), 0);
 
-  const recent = [...INVOICES].sort((a, b) => b.issueDate.localeCompare(a.issueDate)).slice(0, 6);
+  const recent = [...invoices].sort((a, b) => b.issueDate.localeCompare(a.issueDate)).slice(0, 6);
 
   return (
     <div className="container-page py-6 sm:py-8">
@@ -57,7 +61,7 @@ function Dashboard() {
         <Kpi label="Total invoiced" value={formatMoney(totalInvoiced)} hint="Last 90 days" icon={FileText} />
         <Kpi label="Total paid" value={formatMoney(totalPaid)} tone="success" hint="+12% vs. last month" icon={TrendingUp} />
         <Kpi label="Outstanding" value={formatMoney(outstanding)} icon={Wallet} />
-        <Kpi label="Overdue" value={formatMoney(overdue)} tone="danger" hint={`${INVOICES.filter(i=>i.status==="overdue").length} invoice(s)`} icon={AlertTriangle} />
+        <Kpi label="Overdue" value={formatMoney(overdue)} tone="danger" hint={`${invoices.filter(i=>i.status==="overdue").length} invoice(s)`} icon={AlertTriangle} />
         <Kpi label="Drafts" value={String(drafts)} icon={FileText} />
         <Kpi label="Paid this month" value={formatMoney(paidThisMonth)} tone="success" icon={TrendingUp} />
       </div>
@@ -109,7 +113,7 @@ function Dashboard() {
           <CardHeader className="py-4"><CardTitle className="text-base">Status summary</CardTitle></CardHeader>
           <CardContent className="space-y-3 text-sm">
             {(["paid","sent","overdue","partial","draft"] as const).map((s) => {
-              const list = INVOICES.filter((i) => i.status === s);
+              const list = invoices.filter((i) => i.status === s);
               const total = list.reduce((sum, i) => sum + invTotal(i), 0);
               return (
                 <div key={s} className="flex items-center justify-between">

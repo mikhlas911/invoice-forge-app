@@ -4,7 +4,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { StatusBadge } from "@/components/status-badge";
-import { INVOICES, formatMoney, computeTotals, type InvoiceStatus } from "@/lib/demo-data";
+import { formatMoney, computeTotals } from "@/lib/utils/money";
+import { useAppStore } from "@/lib/store/app-store";
+import type { InvoiceStatus } from "@/lib/data/types";
 import { Plus, Search } from "lucide-react";
 
 export const Route = createFileRoute("/app/invoices/")({
@@ -15,11 +17,12 @@ export const Route = createFileRoute("/app/invoices/")({
 const FILTERS: (InvoiceStatus | "all")[] = ["all", "draft", "sent", "paid", "overdue", "partial"];
 
 function InvoiceHistory() {
+  const { invoices } = useAppStore();
   const [q, setQ] = useState("");
   const [filter, setFilter] = useState<(typeof FILTERS)[number]>("all");
   const list = useMemo(() => {
-    return INVOICES.filter((i) => (filter === "all" || i.status === filter) && (q === "" || i.number.toLowerCase().includes(q.toLowerCase()) || i.clientCompany.toLowerCase().includes(q.toLowerCase())));
-  }, [q, filter]);
+    return invoices.filter((i) => (filter === "all" || i.status === filter) && (q === "" || i.number.toLowerCase().includes(q.toLowerCase()) || i.clientCompany.toLowerCase().includes(q.toLowerCase())));
+  }, [invoices, q, filter]);
   return (
     <div className="container-page py-6 sm:py-8">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
