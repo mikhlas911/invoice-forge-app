@@ -8,6 +8,7 @@ import {
 } from "@/components/ui/sheet";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { LayoutDashboard, FileText, Users, Settings, Plus, Menu, Search, Sun, Moon, LogOut, User } from "lucide-react";
+import { AppStoreProvider } from "@/lib/store/app-store";
 
 export const Route = createFileRoute("/app")({
   component: AppLayout,
@@ -123,14 +124,16 @@ function TopBar() {
 
 function AppLayout() {
   return (
-    <div className="flex min-h-screen w-full bg-background">
-      <Sidebar />
-      <div className="flex min-w-0 flex-1 flex-col">
-        <TopBar />
-        <main className="flex-1">
-          <Outlet />
-        </main>
+    <AppStoreProvider>
+      <div className="flex min-h-screen w-full bg-background">
+        <Sidebar />
+        <div className="flex min-w-0 flex-1 flex-col">
+          <TopBar />
+          <main className="flex-1">
+            <Outlet />
+          </main>
+        </div>
       </div>
-    </div>
+    </AppStoreProvider>
   );
 }
