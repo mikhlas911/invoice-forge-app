@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -7,9 +7,14 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { CLIENTS, CURRENCIES, BUSINESS_PROFILE, computeTotals, formatMoney, type LineItem } from "@/lib/demo-data";
-import { Plus, Trash2, ArrowLeft, Save, Send } from "lucide-react";
+import { CURRENCIES } from "@/lib/data/currencies";
+import { BUSINESS_PROFILE } from "@/lib/data/seed";
+import { computeTotals, formatMoney } from "@/lib/utils/money";
+import { useAppStore } from "@/lib/store/app-store";
+import type { LineItem } from "@/lib/data/types";
+import { Plus, Trash2, ArrowLeft, Save, Send, UserPlus } from "lucide-react";
 import { toast } from "sonner";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 
 export const Route = createFileRoute("/app/invoices/new")({
   head: () => ({ meta: [{ title: "New invoice — Ledgerly" }] }),
@@ -20,14 +25,59 @@ function newItem(): LineItem {
   return { id: crypto.randomUUID(), description: "", quantity: 1, price: 0, tax: 0, discount: 0 };
 }
 
+function QuickAddClient({ onCreated }: { onCreated: (id: string) => void }) {
+  const { addClient } = useAppStore();
+  const [open, setOpen] = useState(false);
+  const [form, setForm] = useState({ company: "", name: "", email: "", address: "" });
+  function submit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!form.company.trim() || !form.name.trim()) {
+      toast.error("Company and contact name are required");
+      return;
+    }
+    const c = addClient(form);
+    toast.success(`${c.company} added`);
+    onCreated(c.id);
+    setForm({ company: "", name: "", email: "", address: "" });
+    setOpen(false);
+  }
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button variant="outline" size="sm" type="button"><UserPlus className="mr-1.5 h-4 w-4" /> New client</Button>
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader><DialogTitle>Add a client</DialogTitle></DialogHeader>
+        <form onSubmit={submit} className="grid gap-4">
+          <div className="grid gap-1.5"><Label>Company</Label><Input required value={form.company} onChange={(e) => setForm({ ...form, company: e.target.value })} /></div>
+          <div className="grid gap-1.5"><Label>Contact name</Label><Input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></div>
+          <div className="grid gap-1.5"><Label>Email</Label><Input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} /></div>
+          <div className="grid gap-1.5"><Label>Address</Label><Textarea rows={2} value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} /></div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
+            <Button type="submit">Save client</Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function NewInvoice() {
   const nav = useNavigate();
-  const [number, setNumber] = useState("INV-2026-0043");
+  const { clients, addInvoice, nextInvoiceNumber } = useAppStore();
+
+  const [number, setNumber] = useState(() => nextInvoiceNumber());
   const [issueDate, setIssueDate] = useState(new Date().toISOString().slice(0, 10));
   const [dueDate, setDueDate] = useState(new Date(Date.now() + 14 * 86400_000).toISOString().slice(0, 10));
   const [currency, setCurrency] = useState("USD");
-  const [clientId, setClientId] = useState<string>(CLIENTS[0].id);
-  const client = CLIENTS.find((c) => c.id === clientId)!;
+  const [clientId, setClientId] = useState<string>(clients[0]?.id ?? "");
+  const client = clients.find((c) => c.id === clientId);
+
+  useEffect(() => {
+    if (!clientId && clients[0]) setClientId(clients[0].id);
+  }, [clientId, clients]);
+
   const [items, setItems] = useState<LineItem[]>([
     { id: "i1", description: "", quantity: 1, price: 0, tax: 0, discount: 0 },
   ]);
@@ -45,6 +95,17 @@ function NewInvoice() {
     setItems((prev) => (prev.length === 1 ? prev : prev.filter((i) => i.id !== id)));
   }
   function save(status: "draft" | "sent") {
+    if (!clientId) {
+      toast.error("Add a client first");
+      return;
+    }
+    if (items.every((it) => !it.description.trim())) {
+      toast.error("Add at least one line item");
+      return;
+    }
+    addInvoice({
+      number, clientId, issueDate, dueDate, currency, items, notes, terms, amountPaid, status,
+    });
     toast.success(status === "draft" ? "Invoice saved as draft" : "Invoice sent to client");
     nav({ to: "/app/invoices" });
   }
@@ -65,7 +126,11 @@ function NewInvoice() {
         </div>
       </div>
       <div className="mt-6 grid grid-cols-2 gap-4 text-xs">
-        <div><div className="text-[10px] uppercase tracking-wider text-muted-foreground">Bill to</div><div className="mt-1 font-medium">{client.company}</div><div className="text-muted-foreground">{client.name}</div></div>
+        <div>
+          <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Bill to</div>
+          <div className="mt-1 font-medium">{client?.company ?? "—"}</div>
+          <div className="text-muted-foreground">{client?.name ?? ""}</div>
+        </div>
         <div className="text-right"><div className="text-[10px] uppercase tracking-wider text-muted-foreground">Amount due</div><div className="mt-1 text-lg font-semibold tabular-nums">{formatMoney(balance, currency)}</div></div>
       </div>
       <div className="mt-5 overflow-hidden rounded border border-border">
@@ -123,17 +188,26 @@ function NewInvoice() {
       </Card>
 
       <Card>
-        <CardHeader className="py-4"><CardTitle className="text-sm">Bill to</CardTitle></CardHeader>
+        <CardHeader className="flex flex-row items-center justify-between space-y-0 py-4">
+          <CardTitle className="text-sm">Bill to</CardTitle>
+          <QuickAddClient onCreated={setClientId} />
+        </CardHeader>
         <CardContent className="space-y-3">
-          <Select value={clientId} onValueChange={setClientId}>
-            <SelectTrigger><SelectValue /></SelectTrigger>
-            <SelectContent>{CLIENTS.map((c) => <SelectItem key={c.id} value={c.id}>{c.company} — {c.name}</SelectItem>)}</SelectContent>
-          </Select>
-          <div className="rounded-md border border-border bg-surface-muted/40 p-3 text-sm">
-            <div className="font-medium">{client.company}</div>
-            <div className="text-muted-foreground">{client.name} · {client.email}</div>
-            <div className="text-muted-foreground">{client.address}</div>
-          </div>
+          {clients.length > 0 ? (
+            <Select value={clientId} onValueChange={setClientId}>
+              <SelectTrigger><SelectValue placeholder="Select a client" /></SelectTrigger>
+              <SelectContent>{clients.map((c) => <SelectItem key={c.id} value={c.id}>{c.company} — {c.name}</SelectItem>)}</SelectContent>
+            </Select>
+          ) : (
+            <p className="text-sm text-muted-foreground">No clients yet — add one to continue.</p>
+          )}
+          {client && (
+            <div className="rounded-md border border-border bg-surface-muted/40 p-3 text-sm">
+              <div className="font-medium">{client.company}</div>
+              <div className="text-muted-foreground">{client.name}{client.email ? ` · ${client.email}` : ""}</div>
+              {client.address && <div className="text-muted-foreground">{client.address}</div>}
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -192,13 +266,11 @@ function NewInvoice() {
         </div>
       </div>
 
-      {/* Desktop split view */}
       <div className="hidden gap-6 lg:grid lg:grid-cols-[1.15fr_1fr]">
         <div>{Editor}</div>
         <div className="sticky top-20 self-start">{Preview}</div>
       </div>
 
-      {/* Mobile tabs */}
       <div className="lg:hidden">
         <Tabs defaultValue="edit">
           <TabsList className="grid w-full grid-cols-2"><TabsTrigger value="edit">Edit</TabsTrigger><TabsTrigger value="preview">Preview</TabsTrigger></TabsList>

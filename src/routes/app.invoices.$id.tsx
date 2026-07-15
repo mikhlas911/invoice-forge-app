@@ -1,30 +1,33 @@
-import { createFileRoute, Link, notFound } from "@tanstack/react-router";
-import type { LineItem } from "@/lib/demo-data";
+import { createFileRoute, Link, useNavigate, useParams } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/status-badge";
-import { INVOICES, BUSINESS_PROFILE, formatMoney, computeTotals } from "@/lib/demo-data";
+import { BUSINESS_PROFILE } from "@/lib/data/seed";
+import { formatMoney, computeTotals } from "@/lib/utils/money";
+import { useAppStore } from "@/lib/store/app-store";
+import type { LineItem } from "@/lib/data/types";
 import { ArrowLeft, Printer, Download, Copy, Send } from "lucide-react";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/app/invoices/$id")({
   head: ({ params }) => ({ meta: [{ title: `Invoice ${params.id} — Ledgerly` }] }),
-  loader: ({ params }) => {
-    const inv = INVOICES.find((i) => i.id === params.id);
-    if (!inv) throw notFound();
-    return { inv };
-  },
-  notFoundComponent: () => (
-    <div className="container-page py-16 text-center">
-      <p className="text-sm text-muted-foreground">Invoice not found.</p>
-      <Button asChild className="mt-4"><Link to="/app/invoices">Back to invoices</Link></Button>
-    </div>
-  ),
-  errorComponent: () => <div className="container-page py-16 text-center text-sm text-muted-foreground">Something went wrong loading this invoice.</div>,
   component: InvoiceView,
 });
 
 function InvoiceView() {
-  const { inv } = Route.useLoaderData();
+  const { id } = useParams({ from: "/app/invoices/$id" });
+  const nav = useNavigate();
+  const { invoices, duplicateInvoice, setInvoiceStatus } = useAppStore();
+  const inv = invoices.find((i) => i.id === id);
+
+  if (!inv) {
+    return (
+      <div className="container-page py-16 text-center">
+        <p className="text-sm text-muted-foreground">Invoice not found.</p>
+        <Button asChild className="mt-4"><Link to="/app/invoices">Back to invoices</Link></Button>
+      </div>
+    );
+  }
+
   const totals = computeTotals(inv.items);
   const due = totals.total - inv.amountPaid;
 
@@ -42,8 +45,11 @@ function InvoiceView() {
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button variant="outline" size="sm" onClick={() => toast.success("Invoice duplicated")}><Copy className="mr-1.5 h-4 w-4" /> Duplicate</Button>
-          <Button variant="outline" size="sm" onClick={() => toast.success("Sent to client")}><Send className="mr-1.5 h-4 w-4" /> Send</Button>
+          <Button variant="outline" size="sm" onClick={() => {
+            const copy = duplicateInvoice(inv.id);
+            if (copy) { toast.success("Invoice duplicated"); nav({ to: "/app/invoices/$id", params: { id: copy.id } }); }
+          }}><Copy className="mr-1.5 h-4 w-4" /> Duplicate</Button>
+          <Button variant="outline" size="sm" onClick={() => { setInvoiceStatus(inv.id, "sent"); toast.success("Sent to client"); }}><Send className="mr-1.5 h-4 w-4" /> Send</Button>
           <Button variant="outline" size="sm" onClick={() => window.print()}><Printer className="mr-1.5 h-4 w-4" /> Print</Button>
           <Button size="sm" onClick={() => { window.print(); toast("Use 'Save as PDF' in the print dialog"); }}><Download className="mr-1.5 h-4 w-4" /> Download PDF</Button>
         </div>
